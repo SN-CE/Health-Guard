@@ -49,7 +49,7 @@ def normalize(feat):
 # ---------------------------------------------------------
 # Main conversion pipeline
 # ---------------------------------------------------------
-def wav_to_features(path, mode='mel', resize=(128, 128), **kwargs):
+def wav_to_features(path, mode, resize=(128, 128), **kwargs):
     sr = kwargs.get('sr', 22050)
     duration = kwargs.get('duration', 2.0)
 
@@ -74,7 +74,7 @@ def wav_to_features(path, mode='mel', resize=(128, 128), **kwargs):
 # ---------------------------------------------------------
 def preprocess_dataset(input_dir,
                        output_dir,
-                       mode="wavelet",
+                       mode,
                        resize=(128, 128)):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -117,14 +117,14 @@ if __name__ == "__main__":
         preprocess_dataset(
             input_dir="train_data",
             output_dir="preprocessed_train_data",
-            mode="wavelet",
+            mode="mel",
             resize=(128, 128)
         )
     elif choice == "2":
         preprocess_dataset(
             input_dir="test_data",
             output_dir="preprocessed_test_data",
-            mode="wavelet",
+            mode="mel",
             resize=(128, 128)
         )
     else:
