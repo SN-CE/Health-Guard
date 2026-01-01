@@ -14,7 +14,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {torch.cuda.get_device_name()}")
 
 ds = CoughDataset(root_dir='preprocessed_train_data', classes=('tb_negative','tb_positive'))
-loader = DataLoader(ds, batch_size=100, shuffle=True, num_workers=2)
+loader = DataLoader(ds, batch_size=32, shuffle=True, num_workers=2)
 
 model = SmallCNN().to(device)
 
@@ -27,7 +27,7 @@ else:
 criterion = nn.BCEWithLogitsLoss()
 opt = optim.Adam(model.parameters(), lr=1e-3)
 
-epochs = 20
+epochs = 10
 for ep in range(epochs):
 	model.train()
 	losses = []

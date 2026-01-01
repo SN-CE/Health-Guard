@@ -18,22 +18,14 @@ class SmallCNN(nn.Module):
             # Block 3: 64 → 128
             nn.Conv2d(64, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
             nn.Conv2d(128, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
-            nn.MaxPool2d(2),
-
-            # Block 4: 128 → 256
-            nn.Conv2d(128, 256, 3, padding=1), nn.BatchNorm2d(256), nn.ReLU(),
-            nn.Conv2d(256, 256, 3, padding=1), nn.BatchNorm2d(256), nn.ReLU(),
             nn.AdaptiveAvgPool2d((1, 1))
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Dropout(0.4),
-            nn.Linear(128, 32),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(32, 1)
+            nn.Linear(64, 1)
         )
 
     def forward(self, x):
