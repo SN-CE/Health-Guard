@@ -77,19 +77,8 @@ def preprocess_dataset(input_dir, output_dir, resize=(128, 128)):
 
 
 if __name__ == '__main__':
-    print("Select preprocessing mode:")
-    print("1. Train data")
-    print("2. Test data")
-    choice = input("Enter 1 or 2: ").strip()
-
-    splits = {
-        '1': ('data/raw/audio',         'data/preprocessed/audio'),
-        '2': ('data/raw/audio/test',     'data/preprocessed/audio/test'),
-    }
-
-    if choice not in splits:
-        print("Invalid choice. Exiting.")
-        exit(1)
-
-    input_dir, output_dir = splits[choice]
-    preprocess_dataset(input_dir, output_dir, resize=(128, 128))
+    preprocess_dataset(
+        input_dir='data/raw/audio',
+        output_dir='data/preprocessed/audio',
+        resize=(128, 128)
+    )
