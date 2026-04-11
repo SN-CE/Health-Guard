@@ -78,7 +78,7 @@ def preprocess_dataset(input_dir, output_dir, resize=(128, 128)):
 
 if __name__ == '__main__':
     preprocess_dataset(
-        input_dir='data/raw/audio',
-        output_dir='data/preprocessed/audio',
+        input_dir='../../data/raw/audio',
+        output_dir='../../data/preprocessed/audio',
         resize=(128, 128)
     )

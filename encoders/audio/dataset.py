@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 
 
 class AudioDataset(Dataset):
-    def __init__(self, root_dir='data/preprocessed/audio',
+    def __init__(self, root_dir='../../data/preprocessed/audio',
                  classes=('tb_negative', 'tb_positive'),
                  transform=None):
         self.samples = []
