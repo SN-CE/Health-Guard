@@ -1,17 +1,18 @@
 #!/bin/python3
-# train.py - Audio encoder training for TB detection
+# train.py - X-ray classifier training for TB detection
 import os
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Subset
 import torch.nn as nn
 import torch.optim as optim
-from dataset import AudioDataset
-from model import SmallCNN
+from dataset import XrayDataset
+from model import XrayClassifier
+
 
 def main():
     # ===== CONFIGURATION =====
-    torch.backends.cudnn.enabled = False # Set to True if you want a speed boost
+    torch.backends.cudnn.enabled = False
     torch.manual_seed(42)
     np.random.seed(42)
 
@@ -21,8 +22,8 @@ def main():
 
     # ===== DATASET =====
     print("Loading dataset...")
-    train_ds = AudioDataset(root_dir='../../data/preprocessed/audio',
-                            classes=('tb_negative', 'tb_positive'))
+    train_ds = XrayDataset(root_dir='../../data/preprocessed/xray',
+                           classes=('tb_negative', 'tb_positive'))
 
     # Stratified 80/20 split
     negative_indices = [i for i in range(len(train_ds)) if train_ds[i][1] == 0]
@@ -68,34 +69,51 @@ def main():
     val_loader   = DataLoader(val_subset,   batch_size=32, shuffle=False, num_workers=num_workers)
 
     # ===== MODEL =====
-    model = SmallCNN().to(device)
+    model = XrayClassifier().to(device)
 
-    if os.path.exists('../../weights/audio_encoder.pt'):
-        model.load_state_dict(torch.load('../../weights/audio_encoder.pt', map_location=device))
-        print("Loaded previous best model (audio_encoder.pt)")
+    # Freeze EfficientNet backbone, only train classifier head initially
+    for param in model.features.parameters():
+        param.requires_grad = False
+
+    print("Backbone frozen — training classifier head only")
+
+    if os.path.exists('../../weights/xray_classifier.pt'):
+        model.load_state_dict(torch.load('../../weights/xray_classifier.pt', map_location=device))
+        print("Loaded previous best model (xray_classifier.pt)")
     else:
         print("Starting from scratch")
 
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    
-    # Removed 'verbose' argument to fix TypeError
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-3)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max',
-                                                     factor=0.5, patience=7)
+                                                      factor=0.5, patience=7)
 
     # ===== TRAINING PARAMS =====
     EPOCHS          = 250
     PATIENCE        = 15
     COLLAPSE_MARGIN = 0.10
+    UNFREEZE_EPOCH  = 10
 
-    best_val_acc     = 0.0
+    best_val_acc      = 0.0
     epochs_no_improve = 0
     training_history  = []
+    unfrozen          = False
 
     print("\nStarting training...")
     print("=" * 60)
 
     for epoch in range(EPOCHS):
+
+        # Unfreeze backbone after UNFREEZE_EPOCH epochs
+        if not unfrozen and epoch >= UNFREEZE_EPOCH:
+            for param in model.features.parameters():
+                param.requires_grad = True
+            optimizer = optim.Adam(model.parameters(), lr=1e-4)
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max',
+                                                              factor=0.5, patience=7)
+            print(f"\nEpoch {epoch+1}: Backbone unfrozen — fine-tuning entire model at lr=1e-4")
+            unfrozen = True
+
         # Training phase
         model.train()
         train_losses = []
@@ -123,7 +141,6 @@ def main():
                 x = x.to(device).float()
                 y = y.to(device).float()
 
-                # Squeeze with dim to avoid batch-size-1 issues
                 preds = (torch.sigmoid(model.classify(x)) > 0.5).float().squeeze(-1)
                 val_correct += (preds == y).sum().item()
                 val_total   += len(y)
@@ -150,7 +167,7 @@ def main():
         # Best model saving
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), '../../weights/audio_encoder.pt')
+            torch.save(model.state_dict(), '../../weights/xray_classifier.pt')
             improvement_flag  = "New Best"
             epochs_no_improve = 0
         else:
@@ -161,7 +178,7 @@ def main():
         old_lr = optimizer.param_groups[0]['lr']
         scheduler.step(val_acc)
         new_lr = optimizer.param_groups[0]['lr']
-        
+
         if old_lr != new_lr:
             print(f"Epoch {epoch+1:3d}: reducing learning rate to {new_lr:.2e}.")
 
@@ -195,6 +212,7 @@ def main():
     with open('training_history.csv', 'w') as f:
         f.write(history_str)
     print("Training history saved as: training_history.csv")
+
 
 if __name__ == '__main__':
     main()

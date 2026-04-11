@@ -1,12 +1,12 @@
-# model.py - X-ray encoder for TB detection
+# model.py - X-ray classifier for TB detection
 import torch.nn as nn
-from torchvision.models import efficientnet_b0
+from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 
-class XrayEncoder(nn.Module):
+class XrayClassifier(nn.Module):
     def __init__(self):
         super().__init__()
-        base = efficientnet_b0(pretrained=True)
+        base = efficientnet_b0(weights=EfficientNet_B0_Weights.DEFAULT)
 
         # strip the classifier, keep only the feature extractor
         self.features = base.features
@@ -20,13 +20,11 @@ class XrayEncoder(nn.Module):
             nn.Linear(64, 1)
         )
 
-    def encode(self, x):
+    def classify(self, x):
         x = self.features(x)
         x = self.pool(x)
-        return x.view(x.size(0), -1)  # (batch, 1280)
-
-    def classify(self, x):
-        return self.classifier(self.encode(x))  # (batch, 1)
+        x = x.view(x.size(0), -1)
+        return self.classifier(x)  # (batch, 1)
 
     def forward(self, x):
-        return self.encode(x)
+        return self.classify(x)

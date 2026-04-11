@@ -1,8 +1,8 @@
-# model.py - Audio encoder for TB detection from cough spectrograms
+# model.py - Audio classifier for TB detection from cough spectrograms
 import torch.nn as nn
 
 
-class SmallCNN(nn.Module):
+class AudioClassifier(nn.Module):
     def __init__(self):
         super().__init__()
         self.features = nn.Sequential(
@@ -36,12 +36,10 @@ class SmallCNN(nn.Module):
             nn.Linear(64, 1)
         )
 
-    def encode(self, x):
-        x = self.features(x)
-        return x.view(x.size(0), -1)  # (batch, 256)
-
     def classify(self, x):
-        return self.classifier(self.encode(x))  # (batch, 1)
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        return self.classifier(x)  # (batch, 1)
 
     def forward(self, x):
-        return self.encode(x)
+        return self.classify(x)

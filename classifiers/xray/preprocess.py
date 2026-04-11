@@ -39,7 +39,7 @@ def preprocess_dataset(input_dir, output_dir, resize=(224, 224)):
 
 if __name__ == '__main__':
     preprocess_dataset(
-        input_dir='data/raw/xray',
-        output_dir='data/preprocessed/xray',
+        input_dir='../../data/raw/xray',
+        output_dir='../../data/preprocessed/xray',
         resize=(224, 224)
     )

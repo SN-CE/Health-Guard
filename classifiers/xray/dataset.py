@@ -8,7 +8,7 @@ from torchvision import transforms
 
 
 class XrayDataset(Dataset):
-    def __init__(self, root_dir='data/preprocessed/xray',
+    def __init__(self, root_dir='../../data/preprocessed/xray',
                  classes=('tb_negative', 'tb_positive'),
                  transform=None):
         self.samples = []
