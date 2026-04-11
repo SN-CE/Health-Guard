@@ -1,1 +1,1 @@
-The dev branch is implementing multimodality.
+The dev branch is implementing ensemble multimodality.
