@@ -6,7 +6,7 @@ import numpy as np
 from torch.utils.data import DataLoader, Subset
 import torch.nn as nn
 import torch.optim as optim
-from dataset import XrayDataset
+from dataset import XrayDataset, train_transform, val_transform
 from model import XrayClassifier
 
 
@@ -23,7 +23,8 @@ def main():
     # ===== DATASET =====
     print("Loading dataset...")
     train_ds = XrayDataset(root_dir='../../data/preprocessed/xray',
-                           classes=('tb_negative', 'tb_positive'))
+                           classes=('tb_negative', 'tb_positive'),
+                           transform=train_transform)
 
     # Stratified 80/20 split
     negative_indices = [i for i in range(len(train_ds)) if train_ds[i][1] == 0]
@@ -47,7 +48,12 @@ def main():
     np.random.shuffle(val_indices)
 
     train_subset = Subset(train_ds, train_indices)
-    val_subset   = Subset(train_ds, val_indices)
+
+    # val subset gets clean transform, no augmentation
+    val_ds = XrayDataset(root_dir='../../data/preprocessed/xray',
+                         classes=('tb_negative', 'tb_positive'),
+                         transform=val_transform)
+    val_subset = Subset(val_ds, val_indices)
 
     print(f"\nTraining samples:   {len(train_subset)}")
     print(f"Validation samples: {len(val_subset)}")
@@ -71,11 +77,11 @@ def main():
     # ===== MODEL =====
     model = XrayClassifier().to(device)
 
-    # Freeze EfficientNet backbone, only train classifier head initially
+    # Initially freeze backbone
     for param in model.features.parameters():
         param.requires_grad = False
 
-    print("Backbone frozen — training classifier head only")
+    print("Backbone frozen initially — will be unfrozen later if configured")
 
     if os.path.exists('../../weights/xray_classifier.pt'):
         model.load_state_dict(torch.load('../../weights/xray_classifier.pt', map_location=device))
@@ -83,16 +89,23 @@ def main():
     else:
         print("Starting from scratch")
 
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-3)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max',
+    # Weighted loss to handle class imbalance
+    pos_weight = torch.tensor([neg_train / pos_train]).to(device)
+    print(f"Class imbalance ratio: {neg_train / pos_train:.2f} — applying pos_weight")
+
+    criterion = nn.BCEWithLogitsLoss() # Do initial run with pos_weight, then another run without it. forces model to learn positive class correctly first, then second run fine tunes the loss.
+
+    # Initial optimizer (only classifier head)
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                           lr=1e-3, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                       factor=0.5, patience=7)
 
     # ===== TRAINING PARAMS =====
-    EPOCHS          = 250
-    PATIENCE        = 15
+    EPOCHS          = 35
+    PATIENCE        = 35
     COLLAPSE_MARGIN = 0.10
-    UNFREEZE_EPOCH  = 10
+    UNFREEZE_EPOCH  = 35          # set to > EPOCHS to never unfreeze; lower to enable
 
     best_val_acc      = 0.0
     epochs_no_improve = 0
@@ -104,12 +117,13 @@ def main():
 
     for epoch in range(EPOCHS):
 
-        # Unfreeze backbone after UNFREEZE_EPOCH epochs
+        # ----- Unfreeze backbone if configured -----
         if not unfrozen and epoch >= UNFREEZE_EPOCH:
             for param in model.features.parameters():
                 param.requires_grad = True
-            optimizer = optim.Adam(model.parameters(), lr=1e-4)
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max',
+            # Recreate optimizer with lower LR for full fine-tuning
+            optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-4)
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                               factor=0.5, patience=7)
             print(f"\nEpoch {epoch+1}: Backbone unfrozen — fine-tuning entire model at lr=1e-4")
             unfrozen = True
@@ -131,23 +145,29 @@ def main():
 
         avg_train_loss = np.mean(train_losses)
 
-        # Validation phase
+        # Validation phase – compute both accuracy and loss (loss as extra metric)
         model.eval()
         val_correct = 0
         val_total   = 0
+        val_losses  = []
 
         with torch.no_grad():
             for x, y in val_loader:
                 x = x.to(device).float()
                 y = y.to(device).float()
 
-                preds = (torch.sigmoid(model.classify(x)) > 0.5).float().squeeze(-1)
+                logits = model.classify(x)
+                loss = criterion(logits, y.unsqueeze(1))
+                val_losses.append(loss.item())
+
+                preds = (torch.sigmoid(logits) > 0.5).float().squeeze(-1)
                 val_correct += (preds == y).sum().item()
                 val_total   += len(y)
 
         val_acc = val_correct / val_total if val_total > 0 else 0
+        avg_val_loss = np.mean(val_losses) if val_losses else 0.0
 
-        # Collapse detection
+        # Collapse detection (still based on accuracy)
         drop_amount = best_val_acc - val_acc
         if drop_amount > COLLAPSE_MARGIN:
             print(f"\nModel Collapse! Epoch {epoch+1}")
@@ -164,7 +184,7 @@ def main():
         # Checkpoint saving
         torch.save(model.state_dict(), f'checkpoint_epoch_{epoch+1}.pt')
 
-        # Best model saving
+        # Best model saving (based on validation accuracy)
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(model.state_dict(), '../../weights/xray_classifier.pt')
@@ -174,21 +194,24 @@ def main():
             improvement_flag   = ""
             epochs_no_improve += 1
 
-        # Manual LR change logging
+        # Learning rate scheduling (based on validation accuracy)
         old_lr = optimizer.param_groups[0]['lr']
-        scheduler.step(val_acc)
+        scheduler.step(avg_val_loss)
         new_lr = optimizer.param_groups[0]['lr']
 
         if old_lr != new_lr:
             print(f"Epoch {epoch+1:3d}: reducing learning rate to {new_lr:.2e}.")
 
+        # Print both accuracy and validation loss
         print(f"Epoch {epoch+1:3d}/{EPOCHS} | "
               f"Train Loss: {avg_train_loss:.4f} | "
+              f"Val Loss: {avg_val_loss:.4f} | "
               f"Val Acc: {val_acc:.1%} {improvement_flag}")
 
         training_history.append({
             'epoch':      epoch + 1,
             'train_loss': avg_train_loss,
+            'val_loss':   avg_val_loss,
             'val_acc':    val_acc,
             'best':       val_acc == best_val_acc
         })
@@ -205,9 +228,9 @@ def main():
     print(f"Total epochs trained: {len(training_history)}")
     print(f"Best validation accuracy: {best_val_acc:.1%}")
 
-    history_str = "Epoch,Train_Loss,Val_Acc,Best\n"
+    history_str = "Epoch,Train_Loss,Val_Loss,Val_Acc,Best\n"
     for entry in training_history:
-        history_str += f"{entry['epoch']},{entry['train_loss']:.4f},{entry['val_acc']:.4f},{entry['best']}\n"
+        history_str += f"{entry['epoch']},{entry['train_loss']:.4f},{entry['val_loss']:.4f},{entry['val_acc']:.4f},{entry['best']}\n"
 
     with open('training_history.csv', 'w') as f:
         f.write(history_str)

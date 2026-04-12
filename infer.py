@@ -8,13 +8,10 @@ import numpy as np
 import librosa
 import cv2
 from PIL import Image
-from torchvision import transforms
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'classifiers/audio'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'classifiers/xray'))
-
-from classifiers.audio.model import AudioClassifier
-from classifiers.xray.model  import XrayClassifier
+from classifiers.audio.model  import AudioClassifier
+from classifiers.xray.model   import XrayClassifier
+from classifiers.xray.dataset import val_transform
 
 
 # ===== PREPROCESSING =====
@@ -30,25 +27,16 @@ def preprocess_audio(path, sr=22050, duration=2.0, resize=(128, 128)):
     mel = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=2048,
                                           hop_length=512, n_mels=128)
     mel_db = librosa.power_to_db(mel, ref=np.max).astype(np.float32)
-
     mel_db -= mel_db.min()
     mel_db /= (mel_db.max() + 1e-6)
-
     mel_db = cv2.resize(mel_db, resize, interpolation=cv2.INTER_AREA)
 
-    # (1, 1, H, W) — batch size 1, single channel
-    return torch.from_numpy(mel_db).unsqueeze(0).unsqueeze(0).float()
+    return torch.from_numpy(mel_db).unsqueeze(0).unsqueeze(0).float()  # (1, 1, H, W)
 
 
 def preprocess_xray(path):
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-    ])
     img = Image.open(path).convert('RGB')
-    return transform(img).unsqueeze(0).float()  # (1, 3, 224, 224)
+    return val_transform(img).unsqueeze(0).float()  # (1, 3, 256, 256)
 
 
 # ===== INFERENCE =====
@@ -108,7 +96,16 @@ def run(audio_path=None, xray_path=None):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Health-Guard TB inference')
+    parser = argparse.ArgumentParser(
+        description='Health-Guard TB inference',
+        epilog=(
+            "examples:\n"
+            "  python infer.py --audio patient.wav\n"
+            "  python infer.py --xray patient.png\n"
+            "  python infer.py --audio patient.wav --xray patient.png"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument('--audio', type=str, default=None, help='Path to .wav cough recording')
     parser.add_argument('--xray',  type=str, default=None, help='Path to chest X-ray image')
     args = parser.parse_args()

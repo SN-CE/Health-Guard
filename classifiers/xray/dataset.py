@@ -1,10 +1,28 @@
 # dataset.py - X-ray dataset for TB detection
 import os
 import torch
-import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
+
+
+# mild augmentation for training (medical-safe)
+train_transform = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(5),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+# clean transform for validation and inference
+val_transform = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
 
 
 class XrayDataset(Dataset):
@@ -24,21 +42,13 @@ class XrayDataset(Dataset):
         if not self.samples:
             raise RuntimeError(f"No image files found under {root_dir}")
 
-        # if no custom transform, use default for EfficientNet-B0
-        self.transform = transform or transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-        ])
+        self.transform = transform or val_transform
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
         path, label = self.samples[idx]
-
-        img = Image.open(path).convert('RGB')  # grayscale → 3 channel
-        img = self.transform(img)              # (3, 224, 224)
-
+        img = Image.open(path).convert('RGB')
+        img = self.transform(img)  # (3, 256, 256)
         return img, torch.tensor(label, dtype=torch.float32)
