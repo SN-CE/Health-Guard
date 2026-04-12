@@ -21,6 +21,7 @@ python infer.py --audio patient.wav --xray patient.png
 - Screening tool only — not a diagnostic system, does not replace clinical judgement.
 - Multi-modal fusion is late-stage fusion, with simple averaging, not learned fusion — paired patient data was unavailable for training a proper fusion model.
 - Models were rigorously evaluated informally on out-of-distribution data via infer.py, not formal held-out test sets.
+- Mechanical chest implants such as pacemakers may interfere with X-ray classifier output.
 
 ## Future Work
 - Learned fusion head with paired multi-modal patient data.
