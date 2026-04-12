@@ -1,7 +1,6 @@
 # Health-Guard
 
-A deep learning based TB (tuberculosis) screening tool that accepts cough 
-recordings, chest X-rays, or both, and returns a TB positive/negative result.
+A deep learning based TB (tuberculosis) screening tool that accepts cough recordings, chest X-rays, or both, and returns a TB positive/negative result. The dev branch has implemented this late-stage fusion, ensemble multi-modality.
 
 ## Architecture
 - Audio classifier — custom CNN trained on mel spectrograms of cough recordings.
@@ -26,6 +25,3 @@ python infer.py --audio patient.wav --xray patient.png
 ## Future Work
 - Learned fusion head with paired multi-modal patient data.
 - Extension to additional modalities.
-
-
-The dev branch has implemented this late-stage fusion, ensemble multi-modality.
