@@ -12,11 +12,12 @@ recordings, chest X-rays, or both, and returns a TB positive/negative result.
 - Audio: TBScreen Nairobi Dataset
 - X-ray: TBX11K, Montgomery County, Shenzhen, Mendeley Pakistan dataset
 
-## Usage(bash)
+## Usage
+```bash
 python infer.py --audio patient.wav
 python infer.py --xray patient.png
 python infer.py --audio patient.wav --xray patient.png
-
+```
 ## Limitations
 - Screening tool only — not a diagnostic system, does not replace clinical judgement
 - Multi-modal fusion is simple averaging, not learned fusion — paired patient data was unavailable for training a proper fusion model
